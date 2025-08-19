@@ -1,0 +1,126 @@
+// ==========================================
+// Prisma 설정
+// ==========================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 사용자 테이블
+// ==========================================
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  bio           String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 관계 설정 (이 사용자와 연결된 다른 데이터들)
+  accounts Account[]  // 이 사용자의 소셜 로그인 계정들
+  sessions Session[]  // 이 사용자의 로그인 세션들
+  posts    Post[]     // 이 사용자가 작성한 게시글들
+  likes    Like[]     // 이 사용자가 누른 좋아요들
+  comments Comment[]  // 이 사용자가 작성한 댓글들
+
+  @@map("users")  // 실제 테이블명은 "users"
+}
+
+// ==========================================
+// 게시글 테이블
+// ==========================================
+model Post {
+  id        String   @id @default(cuid())
+  caption   String?  @db.Text      // 캡션 (긴 텍스트 가능)
+  imageUrl  String                 // 이미지 URL (필수)
+  createdAt DateTime @default(now()) // 작성일 (자동 설정)
+  updatedAt DateTime @updatedAt     // 수정일 (자동 업데이트)
+
+  // 작성자 정보
+  authorId String  // 작성자의 ID
+  author   User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // 관계 설정
+  likes    Like[]    // 이 게시글의 좋아요들
+  comments Comment[] // 이 게시글의 댓글들
+
+  @@map("posts")
+}
+
+// ==========================================
+// 좋아요 테이블
+// ==========================================
+model Like {
+  id     String @id @default(cuid())
+  userId String  // 좋아요를 누른 사용자 ID
+  postId String  // 좋아요를 받은 게시글 ID
+
+  // 관계 설정
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // 중요: 한 사용자는 같은 게시글에 좋아요를 한 번만 가능
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+// ==========================================
+// 댓글 테이블
+// ==========================================
+model Comment {
+  id      String @id @default(cuid())
+  content String @db.Text  // 댓글 내용
+  userId  String          // 댓글 작성자 ID
+  postId  String          // 댓글이 달린 게시글 ID
+
+  // 관계 설정
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("comments")
+}
+
+// ==========================================
+// NextAuth 인증용 테이블들 (필수)
+// ==========================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
