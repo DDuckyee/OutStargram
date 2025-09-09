@@ -131,3 +131,136 @@ export async function deletePost(postId) {
     throw error
   }
 }
+
+// 기존 createPost 함수 아래에 추가
+
+// 좋아요 토글 함수
+export async function toggleLike(postId) {
+  try {
+    console.log("❤️ 좋아요 토글 시작:", postId)
+
+    // 로그인 확인
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return { error: "로그인이 필요합니다" }
+    }
+
+    // 게시글 존재 확인
+    const post = await db.post.findUnique({
+      where: { id: postId }
+    })
+
+    if (!post) {
+      return { error: "게시글을 찾을 수 없습니다" }
+    }
+
+    // 기존 좋아요 확인
+    const existingLike = await db.like.findUnique({
+      where: {
+        userId_postId: {
+          userId: session.user.id,
+          postId: postId
+        }
+      }
+    })
+
+    let isLiked
+
+    if (existingLike) {
+      // 이미 좋아요한 경우 → 좋아요 취소
+      await db.like.delete({
+        where: {
+          id: existingLike.id
+        }
+      })
+      isLiked = false
+      console.log("💔 좋아요 취소됨")
+    } else {
+      // 좋아요하지 않은 경우 → 좋아요 추가
+      await db.like.create({
+        data: {
+          userId: session.user.id,
+          postId: postId
+        }
+      })
+      isLiked = true
+      console.log("💖 좋아요 추가됨")
+    }
+
+    // 총 좋아요 수 계산
+    const likesCount = await db.like.count({
+      where: { postId: postId }
+    })
+
+    console.log("✅ 현재 좋아요 수:", likesCount)
+
+    // 홈페이지 캐시 무효화 (좋아요 변경사항 반영)
+    revalidatePath("/")
+
+    return {
+      success: true,
+      isLiked,
+      likesCount
+    }
+
+  } catch (error) {
+    console.error("❌ 좋아요 처리 오류:", error)
+
+    // Prisma 에러 처리
+    if (error.code === "P2002") {
+      return { error: "이미 좋아요를 누르셨습니다" }
+    }
+
+    return { error: "좋아요 처리 중 오류가 발생했습니다" }
+  }
+}
+
+// 게시글 목록과 좋아요 정보 가져오기
+export async function getPostsWithLikes() {
+  try {
+    const session = await getServerSession(authOptions)
+
+    // 게시글 목록 가져오기 (최신순)
+    const posts = await db.post.findMany({
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            image: true
+          }
+        },
+        likes: {
+          select: {
+            userId: true
+          }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'  // 최신 게시글부터
+      }
+    })
+
+    // 현재 사용자가 각 게시글에 좋아요했는지 확인
+    const postsWithLikeStatus = posts.map(post => ({
+      ...post,
+      likesCount: post._count.likes,
+      isLiked: session ? post.likes.some(like => like.userId === session.user.id) : false,
+      // likes 배열은 제거 (클라이언트에서 필요 없음)
+      likes: undefined,
+      _count: undefined
+    }))
+
+    return { success: true, posts: postsWithLikeStatus }
+
+  } catch (error) {
+    console.error("❌ 게시글 목록 조회 오류:", error)
+    return { error: "게시글을 불러올 수 없습니다" }
+  }
+}

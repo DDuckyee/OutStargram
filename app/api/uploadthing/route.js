@@ -1,6 +1,4 @@
-// app/api/uploadthing/route.js
 // UploadThing API 엔드포인트
-
 import { createRouteHandler } from "uploadthing/next"
 import { ourFileRouter } from "@/lib/uploadthing-server"
 

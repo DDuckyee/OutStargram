@@ -1,7 +1,10 @@
+// 홈페이지 - 게시글 피드 표시
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getPostsWithLikes } from "@/actions/posts"
 import Link from "next/link"
-import { Camera, Heart, Users, Sparkles, ArrowRight } from "lucide-react"
+import PostCard from "@/components/PostCard"
+import { Camera, Heart, Users, Sparkles, ArrowRight, Plus } from "lucide-react"
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions)
@@ -38,6 +41,13 @@ export default async function HomePage() {
           {/* 기능 소개 */}
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-pink-100 rounded-full mb-4">
+                <Camera className="w-6 h-6 text-pink-600" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">사진 공유</h3>
+              <p className="text-gray-600">멋진 순간들을 기록하고 친구들과 공유하세요</p>
+            </div>
+            <div className="text-center p-6 bg-white rounded-lg shadow-sm">
               <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-4">
                 <Heart className="w-6 h-6 text-red-600" />
               </div>
@@ -57,52 +67,107 @@ export default async function HomePage() {
     )
   }
 
-  // 로그인한 사용자용 홈페이지
+  // 로그인한 사용자: 게시글 피드 표시
+  const result = await getPostsWithLikes()
+
+  if (result.error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-4">오류가 발생했습니다</div>
+          <p className="text-gray-600">{result.error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const posts = result.posts || []
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto py-8">
-        {/* 환영 메시지 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-          <div className="flex items-center space-x-4">
-            <img
-              src={session.user.image}
-              alt={session.user.name}
-              className="w-12 h-12 rounded-full"
-            />
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
-                안녕하세요, {session.user.name}님! 👋
-              </h1>
-              <p className="text-gray-600">오늘은 어떤 특별한 순간을 공유해볼까요?</p>
+        {/* 환영 헤더 */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <img
+                src={session.user.image}
+                alt={session.user.name}
+                className="w-12 h-12 rounded-full"
+              />
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">
+                  안녕하세요, {session.user.name}님! 👋
+                </h1>
+                <p className="text-gray-600">오늘은 어떤 특별한 순간을 공유해볼까요?</p>
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
+
             <Link
               href="/create"
-              className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>새 게시글 작성하기</span>
+              <Plus className="w-4 h-4" />
+              <span>게시글 작성</span>
             </Link>
           </div>
         </div>
 
-        {/* 피드 영역 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Camera className="w-8 h-8 text-gray-400" />
+        {/* 게시글 피드 */}
+        {posts.length === 0 ? (
+          // 게시글이 없을 때
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center animate-scaleIn">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Camera className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              아직 게시글이 없습니다
+            </h3>
+            <p className="text-gray-500 mb-6">
+              첫 번째 게시글을 작성해서 여러분의 이야기를 시작해보세요!
+            </p>
+            <Link
+              href="/create"
+              className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              <Sparkles className="w-5 h-5" />
+              <span>첫 게시글 작성하기</span>
+            </Link>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            피드가 곧 추가될 예정입니다!
-          </h3>
-          <p className="text-gray-500 mb-6">
-            게시글 작성과 피드 기능이 다음 단계에서 구현됩니다
-          </p>
-          <div className="flex items-center justify-center space-x-2 text-blue-600">
-            <Sparkles className="w-5 h-5" />
-            <span className="font-medium">5단계를 기대해주세요!</span>
+        ) : (
+          // 게시글 목록
+          <div className="space-y-8">
+            {posts.map((post, index) => (
+              <div
+                key={post.id}
+                className="animate-fadeIn"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <PostCard
+                  post={post}
+                  initialLikesCount={post.likesCount}
+                  initialIsLiked={post.isLiked}
+                />
+              </div>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* 더 많은 콘텐츠 로드 (나중에 구현 예정) */}
+        {posts.length > 0 && (
+          <div className="text-center mt-12 py-8">
+            <p className="text-gray-500 text-sm">
+              🎉 모든 게시글을 확인하셨습니다!
+            </p>
+            <Link
+              href="/create"
+              className="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>새 게시글 작성하기</span>
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )
