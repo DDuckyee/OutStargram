@@ -1,13 +1,18 @@
-// 홈페이지 - 게시글 피드 표시
+// app/page.js 수정 (피드 탭 추가)
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getPostsWithLikes } from "@/actions/posts"
+import { getRecommendedUsers } from "@/actions/follow"
 import Link from "next/link"
 import PostCard from "@/components/PostCard"
-import { Camera, Heart, Users, Sparkles, ArrowRight, Plus, MessageCircle } from "lucide-react"
+import FollowButton from "@/components/FollowButton"
+import FeedTabs from "@/components/FeedTabs"
+import { Camera, Heart, Users, Sparkles, ArrowRight, Plus } from "lucide-react"
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }) {
   const session = await getServerSession(authOptions)
+  const resolvedSearchParams = await searchParams  // 🆕 await 추가
+  const feedType = resolvedSearchParams.feed || 'all'
 
   // 로그인하지 않은 사용자용 랜딩 페이지
   if (!session) {
@@ -67,107 +72,248 @@ export default async function HomePage() {
     )
   }
 
-  // 로그인한 사용자: 게시글 피드 표시
-  const result = await getPostsWithLikes()
+  // 로그인한 사용자: 게시글 피드 및 추천 사용자
+  const [postsResult, recommendedResult] = await Promise.all([
+    getPostsWithLikes(feedType),
+    getRecommendedUsers(5)
+  ])
 
-  if (result.error) {
+  if (postsResult.error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-500 text-xl mb-4">오류가 발생했습니다</div>
-          <p className="text-gray-600">{result.error}</p>
+          <p className="text-gray-600">{postsResult.error}</p>
         </div>
       </div>
     )
   }
 
-  const posts = result.posts || []
+  const posts = postsResult.posts || []
+  const recommendedUsers = recommendedResult.users || []
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto py-8">
-        {/* 환영 헤더 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8 animate-fadeIn">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <img
-                src={session.user.image}
-                alt={session.user.name}
-                className="w-12 h-12 rounded-full"
-              />
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  안녕하세요, {session.user.name}님! 👋
-                </h1>
-                <p className="text-gray-600">오늘은 어떤 특별한 순간을 공유해볼까요?</p>
-              </div>
-            </div>
+      <div className="max-w-6xl mx-auto py-8 flex gap-8">
 
-            <Link
-              href="/create"
-              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>게시글 작성</span>
-            </Link>
+        {/* 메인 피드 */}
+        <div className="flex-1 max-w-2xl">
+          {/* 환영 헤더 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <img
+                  src={session.user.image}
+                  alt={session.user.name}
+                  className="w-12 h-12 rounded-full"
+                />
+                <div>
+                  <h1 className="text-xl font-semibold text-gray-900">
+                    안녕하세요, {session.user.name}님! 👋
+                  </h1>
+                  <p className="text-gray-600">오늘은 어떤 특별한 순간을 공유해볼까요?</p>
+                </div>
+              </div>
+
+              <Link
+                href="/create"
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>게시글 작성</span>
+              </Link>
+            </div>
           </div>
+
+          {/* 피드 탭 */}
+          <FeedTabs currentFeed={feedType} />
+
+          {/* 게시글 피드 */}
+          {posts.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center animate-scaleIn">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Camera className="w-8 h-8 text-gray-400" />
+              </div>
+
+              {feedType === 'following' ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    팔로우한 사용자의 게시글이 없습니다
+                  </h3>
+                  <p className="text-gray-500 mb-6">
+                    새로운 사용자를 팔로우하거나 전체 피드를 확인해보세요!
+                  </p>
+                  <div className="flex items-center justify-center space-x-4">
+                    <Link
+                      href="/?feed=all"
+                      className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <span>전체 피드 보기</span>
+                    </Link>
+                    <Link
+                      href="/search"
+                      className="inline-flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <span>사용자 찾기</span>
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    아직 게시글이 없습니다
+                  </h3>
+                  <p className="text-gray-500 mb-6">
+                    첫 번째 게시글을 작성해서 여러분의 이야기를 시작해보세요!
+                  </p>
+                  <Link
+                    href="/create"
+                    className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    <span>첫 게시글 작성하기</span>
+                  </Link>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {posts.map((post, index) => (
+                <div
+                  key={post.id}
+                  className="animate-fadeIn"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <PostCard
+                    post={post}
+                    initialLikesCount={post.likesCount}
+                    initialIsLiked={post.isLiked}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 더 많은 콘텐츠 로드 */}
+          {posts.length > 0 && (
+            <div className="text-center mt-12 py-8">
+              <p className="text-gray-500 text-sm mb-4">
+                🎉 {feedType === 'following' ? '팔로우한 사용자들의' : '모든'} 게시글을 확인하셨습니다!
+              </p>
+              <Link
+                href="/create"
+                className="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>새 게시글 작성하기</span>
+              </Link>
+            </div>
+          )}
         </div>
 
-        {/* 게시글 피드 */}
-        {posts.length === 0 ? (
-          // 게시글이 없을 때
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center animate-scaleIn">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Camera className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              아직 게시글이 없습니다
-            </h3>
-            <p className="text-gray-500 mb-6">
-              첫 번째 게시글을 작성해서 여러분의 이야기를 시작해보세요!
-            </p>
-            <Link
-              href="/create"
-              className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              <Sparkles className="w-5 h-5" />
-              <span>첫 게시글 작성하기</span>
-            </Link>
-          </div>
-        ) : (
-          // 게시글 목록
-          <div className="space-y-8">
-            {posts.map((post, index) => (
-              <div
-                key={post.id}
-                className="animate-fadeIn"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <PostCard
-                  post={post}
-                  initialLikesCount={post.likesCount}
-                  initialIsLiked={post.isLiked}
-                />
+        {/* 사이드바 (추천 사용자) */}
+        <div className="w-80 space-y-6">
+          {/* 추천 사용자 */}
+          {recommendedUsers.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">회원님을 위한 추천</h3>
+                <Link
+                  href="/search"
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+                >
+                  모두 보기
+                </Link>
               </div>
-            ))}
-          </div>
-        )}
 
-        {/* 더 많은 콘텐츠 로드 (나중에 구현 예정) */}
-        {posts.length > 0 && (
-          <div className="text-center mt-12 py-8">
-            <p className="text-gray-500 text-sm">
-              🎉 모든 게시글을 확인하셨습니다!
-            </p>
-            <Link
-              href="/create"
-              className="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>새 게시글 작성하기</span>
-            </Link>
+              <div className="space-y-4">
+                {recommendedUsers.map((user) => (
+                  <div key={user.id} className="flex items-center space-x-3">
+                    <Link href={`/profile/${user.id}`}>
+                      <img
+                        src={user.image || "/default-avatar.png"}
+                        alt={user.name}
+                        className="w-10 h-10 rounded-full hover:opacity-80 transition-opacity"
+                      />
+                    </Link>
+
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        href={`/profile/${user.id}`}
+                        className="block font-semibold text-gray-900 hover:text-gray-600 transition-colors truncate"
+                      >
+                        {user.name}
+                      </Link>
+                      <p className="text-sm text-gray-500 truncate">
+                        팔로워 {user._count.followers}명 • 게시글 {user._count.posts}개
+                      </p>
+                    </div>
+
+                    <FollowButton
+                      targetUserId={user.id}
+                      initialIsFollowing={false}
+                      size="small"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <Link
+                  href="/search"
+                  className="block w-full text-center text-blue-600 hover:text-blue-700 text-sm font-medium py-2 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  더 많은 사용자 찾기
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* 인기 해시태그 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">인기 해시태그</h3>
+
+            <div className="space-y-3">
+              {['#일상', '#맛집', '#여행', '#카페', '#셀카', '#운동'].map((tag, index) => (
+                <Link
+                  key={tag}
+                  href={`/search?hashtag=${tag.slice(1)}`}
+                  className="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                      <span className="text-blue-600 font-semibold text-sm">{index + 1}</span>
+                    </div>
+                    <span className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                      {tag}
+                    </span>
+                  </div>
+                  <span className="text-sm text-gray-500">
+                    {Math.floor(Math.random() * 100) + 10} 게시글
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
-        )}
+
+          {/* 푸터 정보 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="text-center">
+              <h4 className="font-semibold text-gray-900 mb-2">MyGram</h4>
+              <p className="text-sm text-gray-500 mb-4">
+                친구들과 일상을 공유하고 새로운 사람들과 연결되는 공간
+              </p>
+              <div className="flex items-center justify-center space-x-4 text-xs text-gray-400">
+                <Link href="/about" className="hover:text-gray-600 transition-colors">소개</Link>
+                <Link href="/privacy" className="hover:text-gray-600 transition-colors">개인정보</Link>
+                <Link href="/terms" className="hover:text-gray-600 transition-colors">약관</Link>
+              </div>
+              <p className="text-xs text-gray-400 mt-4">
+                © 2024 MyGram. All rights reserved.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

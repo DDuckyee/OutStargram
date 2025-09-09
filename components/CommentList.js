@@ -5,7 +5,7 @@ import { useState, useTransition } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { deleteComment } from "@/actions/posts"
-import { Trash2, Heart, Reply, MoreVertical, Loader2 } from "lucide-react"
+import { Trash2, Heart, Reply, MoreVertical, Loader2, MessageCircle } from "lucide-react"
 
 export default function CommentList({
   comments: initialComments,

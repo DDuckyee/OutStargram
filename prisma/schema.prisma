@@ -29,6 +29,8 @@ model User {
   posts    Post[]     // 이 사용자가 작성한 게시글들
   likes    Like[]     // 이 사용자가 누른 좋아요들
   comments Comment[]  // 이 사용자가 작성한 댓글들
+  following Follow[] @relation("UserFollowing")  // 내가 팔로우하는 사람들
+  followers Follow[] @relation("UserFollowers")  // 나를 팔로우하는 사람들
 
   @@map("users")  // 실제 테이블명은 "users"
 }
@@ -123,4 +125,19 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String   // 팔로우하는 사람 ID
+  followingId String   // 팔로우당하는 사람 ID
+  createdAt   DateTime @default(now())
+
+  // 관계 설정
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  // 중요: 같은 사람을 중복으로 팔로우할 수 없도록 유니크 제약
+  @@unique([followerId, followingId])
+  @@map("follows")
 }

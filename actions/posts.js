@@ -357,12 +357,34 @@ export async function deleteComment(commentId) {
 }
 
 // 게시글 목록과 좋아요, 댓글 정보 가져오기 (기존 함수 수정)
-export async function getPostsWithLikes() {
+export async function getPostsWithLikes(feedType = 'all') {
   try {
     const session = await getServerSession(authOptions)
 
-    // 게시글 목록 가져오기 (최신순 + 댓글 포함)
+    let whereCondition = {}
+
+    // 피드 타입에 따른 필터링
+    if (feedType === 'following' && session) {
+      // 팔로우한 사용자들의 게시글만 가져오기
+      const followingUsers = await db.follow.findMany({
+        where: { followerId: session.user.id },
+        select: { followingId: true }
+      })
+
+      const followingIds = followingUsers.map(f => f.followingId)
+
+      // 팔로우한 사용자들 + 본인의 게시글
+      whereCondition = {
+        authorId: {
+          in: [...followingIds, session.user.id]
+        }
+      }
+    }
+    // feedType이 'all'이면 모든 게시글 (기본값)
+
+    // 게시글 목록 가져오기
     const posts = await db.post.findMany({
+      where: whereCondition,
       include: {
         author: {
           select: {
@@ -387,7 +409,7 @@ export async function getPostsWithLikes() {
             }
           },
           orderBy: {
-            createdAt: 'desc'  // 댓글은 최신순
+            createdAt: 'desc'
           }
         },
         _count: {
@@ -398,7 +420,7 @@ export async function getPostsWithLikes() {
         }
       },
       orderBy: {
-        createdAt: 'desc'  // 최신 게시글부터
+        createdAt: 'desc'
       }
     })
 
@@ -408,12 +430,11 @@ export async function getPostsWithLikes() {
       likesCount: post._count.likes,
       commentsCount: post._count.comments,
       isLiked: session ? post.likes.some(like => like.userId === session.user.id) : false,
-      // likes 배열은 제거 (클라이언트에서 필요 없음)
       likes: undefined,
       _count: undefined
     }))
 
-    return { success: true, posts: postsWithLikeStatus }
+    return { success: true, posts: postsWithLikeStatus, feedType }
 
   } catch (error) {
     console.error("❌ 게시글 목록 조회 오류:", error)
