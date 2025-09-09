@@ -215,12 +215,153 @@ export async function toggleLike(postId) {
   }
 }
 
-// 게시글 목록과 좋아요 정보 가져오기
+
+
+// 기존 toggleLike 함수 아래에 추가
+
+// 댓글 작성 함수
+export async function addComment(formData) {
+  try {
+    console.log("💬 댓글 작성 시작...")
+
+    // 로그인 확인
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return { error: "로그인이 필요합니다" }
+    }
+
+    // 폼 데이터 추출
+    const postId = formData.get("postId")
+    const content = formData.get("content")
+
+    console.log("📝 댓글 데이터:", { postId, content })
+
+    // 유효성 검사
+    if (!postId) {
+      return { error: "게시글 ID가 필요합니다" }
+    }
+
+    if (!content || !content.trim()) {
+      return { error: "댓글 내용을 입력해주세요" }
+    }
+
+    if (content.length > 1000) {
+      return { error: "댓글은 1000자 이하여야 합니다" }
+    }
+
+    // 게시글 존재 확인
+    const post = await db.post.findUnique({
+      where: { id: postId }
+    })
+
+    if (!post) {
+      return { error: "게시글을 찾을 수 없습니다" }
+    }
+
+    // 댓글 생성
+    const comment = await db.comment.create({
+      data: {
+        content: content.trim(),
+        userId: session.user.id,
+        postId: postId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          }
+        }
+      }
+    })
+
+    console.log("✅ 댓글 생성 완료:", comment.id)
+
+    // 홈페이지 캐시 무효화 (댓글 변경사항 반영)
+    revalidatePath("/")
+
+    return {
+      success: true,
+      comment: comment
+    }
+
+  } catch (error) {
+    console.error("❌ 댓글 작성 오류:", error)
+
+    // Prisma 에러 처리
+    if (error.code === "P2025") {
+      return { error: "게시글을 찾을 수 없습니다" }
+    }
+
+    return { error: "댓글 작성 중 오류가 발생했습니다" }
+  }
+}
+
+// 댓글 삭제 함수
+export async function deleteComment(commentId) {
+  try {
+    console.log("🗑️ 댓글 삭제 시작:", commentId)
+
+    // 로그인 확인
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return { error: "로그인이 필요합니다" }
+    }
+
+    // 댓글 조회 (권한 확인용)
+    const comment = await db.comment.findUnique({
+      where: { id: commentId },
+      include: {
+        post: {
+          select: {
+            authorId: true
+          }
+        }
+      }
+    })
+
+    if (!comment) {
+      return { error: "댓글을 찾을 수 없습니다" }
+    }
+
+    // 삭제 권한 확인 (댓글 작성자 또는 게시글 작성자)
+    const canDelete = comment.userId === session.user.id ||
+                     comment.post.authorId === session.user.id
+
+    if (!canDelete) {
+      return { error: "댓글을 삭제할 권한이 없습니다" }
+    }
+
+    // 댓글 삭제
+    await db.comment.delete({
+      where: { id: commentId }
+    })
+
+    console.log("✅ 댓글 삭제 완료")
+
+    // 홈페이지 캐시 무효화
+    revalidatePath("/")
+
+    return { success: true }
+
+  } catch (error) {
+    console.error("❌ 댓글 삭제 오류:", error)
+
+    if (error.code === "P2025") {
+      return { error: "댓글을 찾을 수 없습니다" }
+    }
+
+    return { error: "댓글 삭제 중 오류가 발생했습니다" }
+  }
+}
+
+// 게시글 목록과 좋아요, 댓글 정보 가져오기 (기존 함수 수정)
 export async function getPostsWithLikes() {
   try {
     const session = await getServerSession(authOptions)
 
-    // 게시글 목록 가져오기 (최신순)
+    // 게시글 목록 가져오기 (최신순 + 댓글 포함)
     const posts = await db.post.findMany({
       include: {
         author: {
@@ -233,6 +374,20 @@ export async function getPostsWithLikes() {
         likes: {
           select: {
             userId: true
+          }
+        },
+        comments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'  // 댓글은 최신순
           }
         },
         _count: {
@@ -251,6 +406,7 @@ export async function getPostsWithLikes() {
     const postsWithLikeStatus = posts.map(post => ({
       ...post,
       likesCount: post._count.likes,
+      commentsCount: post._count.comments,
       isLiked: session ? post.likes.some(like => like.userId === session.user.id) : false,
       // likes 배열은 제거 (클라이언트에서 필요 없음)
       likes: undefined,

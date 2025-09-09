@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getPostsWithLikes } from "@/actions/posts"
 import Link from "next/link"
 import PostCard from "@/components/PostCard"
-import { Camera, Heart, Users, Sparkles, ArrowRight, Plus } from "lucide-react"
+import { Camera, Heart, Users, Sparkles, ArrowRight, Plus, MessageCircle } from "lucide-react"
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions)
